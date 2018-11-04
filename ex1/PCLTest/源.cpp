@@ -6,10 +6,12 @@
 #include <opencv2\opencv.hpp>
 #include <fstream>
 
+//内参参数
 #define FX 210.88
 #define FY 211.12
 #define CX 168.340
 #define CY 138.013
+//畸变矫正参数
 #define K1 -0.369
 #define K2 0.134
 
