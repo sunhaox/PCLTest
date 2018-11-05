@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2018 HadenSun
+ * Contact: http://www.sunhx.cn
+ * E-mail: admin@sunhx.cn
+ *
+ * Description:
+ *	 读取CSV文件，根据参数畸变矫正，转世界坐标系后PCL显示结果。
+ *
+ */
+
 
 #include <pcl\visualization\cloud_viewer.h>
 #include <iostream>
@@ -119,8 +129,20 @@ Mat imageUndist(Mat src)
 	Size imageSize = src.size();
 	Mat map1, map2;
 
-	initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(), cameraMatrix, imageSize, CV_32FC1, map1, map2);	//
-	remap(src, img, map1, map2, INTER_LINEAR);
+	//参数1：相机内参矩阵
+	//参数2：畸变矩阵
+	//参数3：可选输入，第一和第二相机坐标之间的旋转矩阵
+	//参数4：校正后的3X3相机矩阵
+	//参数5：无失真图像尺寸
+	//参数6：map1数据类型，CV_32FC1或CV_16SC2
+	//参数7、8：输出X/Y坐标重映射参数
+	initUndistortRectifyMap(cameraMatrix, distCoeffs, Mat(), cameraMatrix, imageSize, CV_32FC1, map1, map2);	//计算畸变映射
+	//参数1：畸变原始图像
+	//参数2：输出图像
+	//参数3、4：X\Y坐标重映射
+	//参数5：图像的插值方式
+	//参数6：边界填充方式
+	remap(src, img, map1, map2, INTER_LINEAR);																	//畸变矫正
 
 	return img.clone();
 }
@@ -136,7 +158,7 @@ void imageCsvToPcd()
 	Mat img;
 
 	mImageDepth = imageUndist(mImageDepth);		//畸变矫正
-	
+
 
 	//16位压缩至8位
 	Mat mImageZip;
