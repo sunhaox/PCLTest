@@ -19,5 +19,6 @@ showPCD：读取PCD文件然后对比显示。
 pathThroughFilter：范围过滤。对指定范围外的点云数据删除。  
 voxelGridFilter：利用体素化网络方式降采样。  
 statisticalOutlierRemovalFilter：基于距离统计去除异常噪声  
+extractIndicedFilter：从点云数据中提取索引  
 radiusOutlierRemovalFilter：基于邻居数量去除异常噪声  
 conditionalRemovalFilter：基于指定条件去除异常噪声  

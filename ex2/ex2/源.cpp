@@ -9,6 +9,7 @@
  *   pathThroughFilter：范围过滤。对指定范围外的点云数据删除。
  *	 voxelGridFilter：利用体素化网络方式降采样。
  *   statisticalOutlierRemovalFilter：基于距离统计去除异常噪声
+ *   extractIndicedFilter：从点云数据中提取索引
  *	 radiusOutlierRemovalFilter：基于邻居数量去除异常噪声
  *	 conditionalRemovalFilter：基于指定条件去除异常噪声
  *
@@ -24,6 +25,8 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/conditional_removal.h>
 #include <pcl/filters/radius_outlier_removal.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 using namespace std;
 using namespace pcl;
@@ -37,13 +40,13 @@ int user_data;
 //输出： 无
 void showPCD(string file1, string file2)
 {
-	PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
-	PointCloud<PointXYZ>::Ptr cloud_filtered(new PointCloud<PointXYZ>);
+	PointCloud<PointXYZ>::Ptr cloud_1(new PointCloud<PointXYZ>);
+	PointCloud<PointXYZ>::Ptr cloud_2(new PointCloud<PointXYZ>);
 
 	//文件读取
 	PCDReader reader;
-	reader.read<PointXYZ>(file1, *cloud);
-	reader.read<PointXYZ>(file2, *cloud_filtered);
+	reader.read<PointXYZ>(file1, *cloud_1);
+	reader.read<PointXYZ>(file2, *cloud_2);
 
 	//显示结果对比
 	int v1(0), v2(0);
@@ -51,11 +54,11 @@ void showPCD(string file1, string file2)
 	viewer.setWindowName("结果显示");
 	viewer.createViewPort(0, 0, 0.5, 1.0, v1);
 	viewer.setBackgroundColor(0, 0, 0, v1);
-	viewer.addPointCloud(cloud, "before", v1);
+	viewer.addPointCloud(cloud_1, "before", v1);
 
 	viewer.createViewPort(0.5, 0.0, 1.0, 1.0, v2);
 	viewer.setBackgroundColor(0.3, 0.3, 0.3, v2);
-	viewer.addPointCloud(cloud_filtered, "after", v2);
+	viewer.addPointCloud(cloud_2, "after", v2);
 
 	while (!viewer.wasStopped())
 	{
@@ -248,6 +251,73 @@ int statisticalOutlierRemovalFilter()
 	return 0;
 }
 
+//从点云数据中提取索引
+//使用了体素化滤波后的降采样结果
+//利用SACSegmentation分割点云，利用ExtractIndices索引提取分割的点云。
+//输入：无
+//输出：正常结束0
+int extractIndicedFilter()
+{
+	PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
+	PointCloud<PointXYZ>::Ptr cloud_p(new PointCloud<PointXYZ>);
+	PointCloud<PointXYZ>::Ptr cloud_f(new PointCloud<PointXYZ>);
+
+	//读取点云数据
+	PCDReader reader;
+	PCDWriter writer;
+	reader.read<PointXYZ>("table_scene_lms400_downsampled.pcd", *cloud);
+
+	ModelCoefficients::Ptr coefficients(new ModelCoefficients());		//结构体，存储拟合出的模型系数。这里拟合平面，数学定义ax+by+cz+d=0即一个平面，这里存储a,b,c,d
+	PointIndices::Ptr inliers(new PointIndices());						//结构体，存储拟合出的符合模型的点索引
+	//创建分割对象
+	SACSegmentation<PointXYZ> seg;
+	//可选
+	seg.setOptimizeCoefficients(true);
+	//必选
+	seg.setModelType(SACMODEL_PLANE);		//设置模型类型，平面/线/圆2D3D/球/圆柱/椎体/平行线等可选
+	seg.setMethodType(SAC_RANSAC);			//设置方法类型SAC_RANSAC（随机抽样一致）
+	seg.setMaxIterations(1000);				//设置最大迭代次数
+	seg.setDistanceThreshold(0.01);			//到模型距离的阈值
+
+	//创建滤波对象
+	ExtractIndices<PointXYZ> extract;
+
+	int i = 0;
+	int nr_points = (int)cloud->points.size();
+
+	//30% 的原始点还在则继续提取
+	while (cloud->points.size() > 0.3*nr_points)
+	{
+		//从剩余的云中分割出最大的平面组件
+		seg.setInputCloud(cloud);
+		seg.segment(*inliers, *coefficients);			//拟合出的平面的点索引和平面参数分别存入inliers和coefficients
+		if (inliers->indices.size() == 0)
+		{
+			cerr << "Could not estimate a planar model for the given dataset. " << endl;
+			break;
+		}
+
+		//提取索引
+		extract.setInputCloud(cloud);		//设置原始点云数据
+		extract.setIndices(inliers);		//设置点云索引
+		extract.setNegative(false);
+		extract.filter(*cloud_p);			//提取点云
+		cerr << "PointCloud representing the planar component: " << cloud_p->width * cloud_p->height << " data points." << endl;
+
+		stringstream ss;
+		ss << "table_scene_lms400_plane_" << i << ".pcd";
+		writer.write<PointXYZ>(ss.str(), *cloud_p, false);		//存储分割后的点云数据
+
+		//提取剩下的点
+		extract.setNegative(true);
+		extract.filter(*cloud_f);
+		cloud.swap(cloud_f);
+		i++;
+	}
+
+	return 0;
+}
+
 //基于邻居数量过滤噪声
 //输入：无
 //输出：正常结果0
@@ -397,11 +467,12 @@ int main(int argc, char** argv)
 	//voxelGridFilter();					//下采样，减少点个数
 	//statisticalOutlierRemovalFilter();	//基于距离统计滤波，滤除噪声
 	//radiusOutlierRemovalFilter();			//基于范围内邻居数滤波，滤除噪声
-	conditionalRemovalFilter();			//基于给定的条件过滤噪声
+	//conditionalRemovalFilter();			//基于给定的条件过滤噪声
+	//extractIndicedFilter();				//从点云数据中提取索引
 
 
 	//各方法处理的结果都保存在各自的PCD文件，可以直接打开查看
-	//showPCD("table_scene_lms400.pcd", "table_scene_lms400_inliers.pcd");
+	//showPCD("table_scene_lms400_plane_1.pcd", "table_scene_lms400_plane_0.pcd");
 
 	system("pause");
 
