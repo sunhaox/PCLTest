@@ -162,7 +162,7 @@ void imageCsvToPcd()
 
 	//16位压缩至8位
 	Mat mImageZip;
-	mImageDepth.convertTo(mImageZip, CV_8U, 1/255, 0);
+	mImageDepth.convertTo(mImageZip, CV_8U, 1.0/10, -400);
 
 	//生成伪彩色图像
 	Mat mImageColor;
