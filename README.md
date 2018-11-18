@@ -10,6 +10,9 @@ PCL 1.8.0
 OpenCV 2.4.13
 
 ## Contents
+* pcd:  
+供参考的PCD文件。
+
 * ex1:  
 读取CSV文件，根据参数畸变矫正，转世界坐标系后PCL显示结果。
 
