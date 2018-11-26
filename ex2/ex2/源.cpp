@@ -465,7 +465,7 @@ int main(int argc, char** argv)
 {
 	//pathThroughFilter();					//指定范围外剔除
 	//voxelGridFilter();					//下采样，减少点个数
-	//statisticalOutlierRemovalFilter();	//基于距离统计滤波，滤除噪声
+	statisticalOutlierRemovalFilter();	//基于距离统计滤波，滤除噪声
 	//radiusOutlierRemovalFilter();			//基于范围内邻居数滤波，滤除噪声
 	//conditionalRemovalFilter();			//基于给定的条件过滤噪声
 	//extractIndicedFilter();				//从点云数据中提取索引
