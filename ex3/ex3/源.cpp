@@ -23,6 +23,7 @@
 #include <omp.h>
 #include <pcl/features/fpfh.h>
 #include <pcl/features/fpfh_omp.h>
+#include <pcl/features/vfh.h>
 
 using namespace std;
 using namespace pcl;
@@ -224,6 +225,8 @@ int fpfhEstimationFeatures()
 	fpfh.setNumberOfThreads(4);				//设置线程数
 	fpfh.compute(*fpfhs);					
 
+	cout << "fpfh feature size:" << fpfhs->points.size() << endl;	//应该与点数相同
+
 	//直方图可视化
 	visualization::PCLPlotter plotter;
 	plotter.addFeatureHistogram(*fpfhs, 300);	//显示第300个点FPH直方图
@@ -241,12 +244,65 @@ int fpfhEstimationFeatures()
 	return 0;
 }
 
+//VFH特征
+//视点特征直方图VFH(Viewpoint Feature Histogram)描述子，
+//它是一种新的特征表示形式，应用在点云聚类识别和六自由度位姿估计问题。
+//我们做了以下两种计算来构造特征，以应用于目标识别问题和位姿估计：
+//1.扩展FPFH，使其利用整个点云对象来进行计算估计，
+//在计算FPFH时以物体中心点与物体表面其他所有点之间的点对作为计算单元。
+//2.添加视点方向与每个点估计法线之间额外的统计信息，为了达到这个目的，
+//我们的关键想法是在FPFH计算中将视点方向变量直接融入到相对法线角计算当中
+//对扩展的FPFH分量来说，默认的VFH的实现使用45个子区间进行统计，而对于视点分量要使用128个子区间进行统计，
+//这样VFH就由一共308个浮点数组成阵列。
+//在PCL中利用pcl::VFHSignature308的点类型来存储表示。
+//对于一个已知的点云数据集，只一个单一的VFH描述子，而合成的PFH/FPFH特征的数目和点云中的点数目相同。
+//输入：无
+//输出：正常结束0
+int vfhEstimationFeatures()
+{
+	PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
+
+	//读取点云数据
+	PCDReader reader;
+	reader.read("1258107463333_cluster_0_nxyz.pcd", *cloud);
+
+	//计算法线
+	NormalEstimationOMP<PointXYZ, Normal> ne;
+	PointCloud<Normal>::Ptr normal(new PointCloud<Normal>);
+	search::KdTree<PointXYZ>::Ptr tree1(new search::KdTree<PointXYZ>());
+	ne.setInputCloud(cloud);		//设置输入点云数据
+	ne.setSearchMethod(tree1);		//设置搜索算法KD树
+	ne.setRadiusSearch(0.03);		//设置搜索半径0.03
+	ne.setNumberOfThreads(4);		//设置计算线程4
+	ne.compute(*normal);			//计算法线
+
+	//计算VFH
+	VFHEstimation<PointXYZ, Normal, VFHSignature308> vfh;
+	PointCloud<VFHSignature308>::Ptr vfhs(new PointCloud<VFHSignature308>());
+	search::KdTree<PointXYZ>::Ptr tree2(new search::KdTree<PointXYZ>());
+	vfh.setInputCloud(cloud);		//设置输入点云数据
+	vfh.setInputNormals(normal);	//设置输入法线
+	vfh.setSearchMethod(tree2);		//设置搜索算法KD数
+	vfh.compute(*vfhs);				//计算VFH特征
+
+	cout << "vfh feature size: " << vfhs->points.size() << endl;		//应该等于1
+
+	//直方图可视化
+	visualization::PCLPlotter plotter;
+	plotter.addFeatureHistogram(*vfhs, 300);
+	plotter.plot();
+
+	return 0;
+}
+
 int main()
 {
 	//estimatingTheNormalsFeatures();			//PCA估计法向并显示
 	//integralImageNormalEstimationFeatures();	//积分图像计算有组织点云的法线估计
+	//关于PFH和FPFH特征，参考ex_etc里的pfh_demo和fpfh_demo更好理解
 	//pfhEstimationFeatures();					//PFH特征
-	fpfhEstimationFeatures();					//FPFH特征
+	//fpfhEstimationFeatures();					//FPFH特征
+	vfhEstimationFeatures();					//VFH特征
 
 	system("pause");
 
