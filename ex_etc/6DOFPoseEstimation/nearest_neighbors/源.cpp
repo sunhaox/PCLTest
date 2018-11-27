@@ -264,9 +264,11 @@ main(int argc, char** argv)
 		//计算形心
 		pcl::compute3DCentroid(cloud_xyz, centroid);
 		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_xyz_demean(new pcl::PointCloud<pcl::PointXYZ>);
+		// 做偏移使得形心位于中心
 		pcl::demeanPointCloud<pcl::PointXYZ>(cloud_xyz, centroid, *cloud_xyz_demean);
 		// Add to renderer*
 		p.addPointCloud(cloud_xyz_demean, cloud_name, viewport);
+
 
 		// Check if the model found is within our inlier tolerance
 		std::stringstream ss;
