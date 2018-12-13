@@ -24,6 +24,11 @@
 #include <pcl/features/fpfh.h>
 #include <pcl/features/fpfh_omp.h>
 #include <pcl/features/vfh.h>
+#include <pcl/visualization/range_image_visualizer.h>
+#include <pcl/features/range_image_border_extractor.h>
+#include <pcl/keypoints/narf_keypoint.h>
+#include <pcl/features/narf_descriptor.h>
+#include <pcl/console/parse.h>
 
 using namespace std;
 using namespace pcl;
@@ -295,6 +300,127 @@ int vfhEstimationFeatures()
 	return 0;
 }
 
+//NARF特征
+//输入：angular_resolution 角度分辨率，默认0.5
+//输入：coordinate_frame 坐标系，默认相机坐标系
+//输入：setUnseenToMaxRange 是否将所有不可见点看作最大距离，默认false
+//输入：support_size 感兴趣点的尺寸（球面直径），默认0.2
+//输入：roation_invariant 特征旋转不变特性，默认开
+//输出：正常结束0
+int narfDescriptor(float angular_resolution = 0.5f,
+	RangeImage::CoordinateFrame coordinate_frame = RangeImage::CAMERA_FRAME,
+	bool setUnseenToMaxRange = false,
+	float support_size = 0.2f,
+	bool rotation_invariant = true)
+{
+	PointCloud<PointXYZ>::Ptr cloud(new PointCloud<PointXYZ>);
+	PointCloud<PointXYZ>& point_cloud = *cloud;
+	Eigen::Affine3f scene_sensor_pose(Eigen::Affine3f::Identity()); //仿射变换
+	PointCloud<PointWithViewpoint> far_ranges;						//带视角的点云
+
+	
+	//读取点云数据
+	PCDReader reader;
+	reader.read("office_scene.pcd", *cloud);
+
+	//设置传感器姿势
+	scene_sensor_pose = Eigen::Affine3f(Eigen::Translation3f(cloud->sensor_origin_[0],
+		cloud->sensor_origin_[1],
+		cloud->sensor_origin_[2])) *
+		Eigen::Affine3f(cloud->sensor_orientation_);
+
+	//读取远距离文件
+	//reader.read("frame_00000_far_ranges.pcd", far_ranges);
+
+	/*
+	setUnseenToMaxRange = true;//将所有不可见的点 看作 最大距离
+	cout << "\nNo *.pcd file given => Genarating example point cloud.\n\n";
+	for (float x = -0.5f; x <= 0.5f; x += 0.01f)
+	{
+		for (float y = -0.5f; y <= 0.5f; y += 0.01f)
+		{
+			PointXYZ point;  point.x = x;  point.y = y;  point.z = 2.0f - y;
+			point_cloud.points.push_back(point);//设置点云中点的坐标
+		}
+	}
+	point_cloud.width = (int)point_cloud.points.size();
+	point_cloud.height = 1;
+	*/
+	
+
+	//从点云数据，创建深度图像
+	//直接把三维点云投射成二维图像
+	float noise_level = 0.0;	//容差率，因为1°X1°空间内可能不止一点，0表示去最近点的距离作为像素值，0.05表示最近点后5cm求平均
+	float min_range = 0.0f;		//深度最小值，0表示取1°X1°空间内最远点
+	int border_size = 1;		//图像周边点
+	boost::shared_ptr<RangeImage> range_image_ptr(new RangeImage);
+	RangeImage& range_image = *range_image_ptr;
+	
+	range_image.createFromPointCloud(point_cloud, angular_resolution, deg2rad(360.0f), deg2rad(180.0f),
+		scene_sensor_pose, coordinate_frame, noise_level, min_range, border_size);
+	//range_image.integrateFarRanges(far_ranges);		//整合远距离点云
+	if (setUnseenToMaxRange)
+		range_image.setUnseenToMaxRange();
+
+	//3D点云显示
+	visualization::PCLVisualizer viewer("3D Viewer");
+	viewer.setBackgroundColor(1, 1, 1);			//背景白色
+	visualization::PointCloudColorHandlerCustom<PointWithRange> range_image_color_handler(range_image_ptr, 0, 0, 0);
+	viewer.addPointCloud(range_image_ptr, range_image_color_handler, "range image");
+	viewer.setPointCloudRenderingProperties(visualization::PCL_VISUALIZER_POINT_SIZE, 2, "range image");
+	viewer.initCameraParameters();
+
+	//显示深度图像（平面图）
+	visualization::RangeImageVisualizer range_image_widget("Range image");
+	range_image_widget.showRangeImage(range_image);
+
+	//提取NARF关键点
+	RangeImageBorderExtractor range_image_border_extractor;				//创建深度图像的边界提取器，用于提取NARF关键点
+	NarfKeypoint narf_keypoint_detector(&range_image_border_extractor);	//创建NARF对象
+	narf_keypoint_detector.setRangeImage(&range_image);					//设置点云对应深度图
+	narf_keypoint_detector.getParameters().support_size = support_size; //感兴趣点尺寸（球面的直径）
+
+	PointCloud<int> keypoint_indices;	//用于存储关键点的索引 PointCloud<int>
+	narf_keypoint_detector.compute(keypoint_indices);	//计算NARF
+	cout << "找到关键点：" << keypoint_indices.points.size() << " key points." << endl;
+
+	//3D显示关键点
+	PointCloud<PointXYZ>::Ptr keypoints_ptr(new PointCloud<PointXYZ>);
+	PointCloud<PointXYZ>& keypoints = *keypoints_ptr;
+	keypoints.points.resize(keypoint_indices.points.size());		//初始化大小
+	for (size_t i = 0; i < keypoint_indices.points.size(); i++)
+	{
+		keypoints.points[i].getVector3fMap() = range_image.points[keypoint_indices.points[i]].getVector3fMap();
+	}
+
+	visualization::PointCloudColorHandlerCustom<PointXYZ> keypoints_color_handler(keypoints_ptr, 255, 0, 0);
+	viewer.addPointCloud<PointXYZ>(keypoints_ptr, keypoints_color_handler, "keypoints");		//添加显示关键点
+	viewer.setPointCloudRenderingProperties(visualization::PCL_VISUALIZER_POINT_SIZE, 7, "keypoints");
+
+	//提取NARF特征
+	vector<int> keypoints_indices2;
+	keypoints_indices2.resize(keypoint_indices.points.size());
+	for (size_t i = 0; i < keypoint_indices.size(); i++)
+		keypoints_indices2[i] = keypoint_indices.points[i];				//narf关键点索引
+	NarfDescriptor narf_descriptor(&range_image, &keypoints_indices2);	//narf特征描述子
+	narf_descriptor.getParameters().support_size = support_size;
+	narf_descriptor.getParameters().rotation_invariant = rotation_invariant;
+	PointCloud<Narf36> narf_descriptors;
+	narf_descriptor.compute(narf_descriptors);
+	cout << "Extracted " << narf_descriptors.size() << " descriptors for " << keypoint_indices.points.size() << " keypoints." << endl;
+
+
+	while (!viewer.wasStopped())
+	{
+		range_image_widget.spinOnce();
+		viewer.spinOnce();
+		pcl_sleep(0.01);
+	}
+
+	return 0;
+
+}
+
 int main()
 {
 	//estimatingTheNormalsFeatures();			//PCA估计法向并显示
@@ -302,7 +428,8 @@ int main()
 	//关于PFH和FPFH特征，参考ex_etc里的pfh_demo和fpfh_demo更好理解
 	//pfhEstimationFeatures();					//PFH特征
 	//fpfhEstimationFeatures();					//FPFH特征
-	vfhEstimationFeatures();					//VFH特征
+	//vfhEstimationFeatures();					//VFH特征
+	narfDescriptor();							//NARF特征
 
 	system("pause");
 

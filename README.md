@@ -32,9 +32,13 @@ estimatingTheNormalsFeatures：PCA估计法向量
 integralImageNormalEstimationFeatures：积分图像计算有组织点云的法线估计  
 pfhEstimationFeatures：PFH特征计算  
 fpfhEstimationFeatures：FPFH特征计算  
+narfEstimationFeatures: NARF特征计算  
 
 * ex_etc:  
 一些综合演示程序。  
 pfh_demo：PFH特征提取例子。运行后按SHIFT+左键选点显示PFH直方图。  
 fpfh_demo：FPFH特征提取例子。运行后按SHIFT+左键选点显示FPFH直方图。  
 6DOFPoseEstimation：利用VFH特征，根据训练样本，输出和测试样本一类的物体。  
+  
+* test：
+还在测试中的程序。
