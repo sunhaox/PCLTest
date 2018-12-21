@@ -38,6 +38,7 @@ narfEstimationFeatures: NARF特征计算
 配准算法测试例子  
 ICPAlgorithms：利用ICP（迭代最近点）算法求取状态转移矩阵。  
 NDTAlgorithms：利用NDT（正太分布变换）算法配准。  
+SACIAAlgorithms：根据提取的FPFH特征，SAC-IA匹配  
 
 * ex_etc:  
 一些综合演示程序。  
