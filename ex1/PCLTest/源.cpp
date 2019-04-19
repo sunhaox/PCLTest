@@ -142,7 +142,7 @@ Mat imageUndist(Mat src)
 	//参数3、4：X\Y坐标重映射
 	//参数5：图像的插值方式
 	//参数6：边界填充方式
-	remap(src, img, map1, map2, INTER_LINEAR);																	//畸变矫正
+	remap(src, img, map1, map2, cv::INTER_NEAREST);																	//畸变矫正
 
 	return img.clone();
 }
